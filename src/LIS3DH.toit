@@ -1,3 +1,9 @@
+// Copyright (C) 2021 Toitware ApS. All rights reserved.
+// Use of this source code is governed by a MIT-style license that can be found
+// in the LICENSE file.
+
+// LIS3DH data sheet: https://www.st.com/resource/en/datasheet/lis3dh.pdf
+
 import binary
 import serial.device as serial
 import serial.registers as serial
@@ -62,6 +68,25 @@ class lis3dh:
     // Check chip ID
     if (reg_.read_u8 WHO_AM_I_) != CHIP_ID_: throw "INVALID_CHIP"
 
+  /**
+  Enables the sensor.
+  The $output_data_rate parameter defines the frequency at which measurements are taken.
+  Valid values for $rate are:
+  - 1  Hz
+  - 10 Hz
+  - 25 Hz
+  - 50 Hz
+  - 100 Hz
+  - 200 Hz
+  - 400 Hz
+
+  The $max_g_force parameter defines the maximum +/- range (in g).
+  Valid values for $max_g_force are:
+  - 2 g
+  - 4 g
+  - 8 g
+  - 16 g
+  */
   enable -> none
       --output_data_rate/int = 10 
       --max_g_force/int = 2: 
@@ -73,7 +98,7 @@ class lis3dh:
     reg_.write_u8 FIFO_CTRL_REG_ STREAM_MODE_ // STREAM mode
   
   /**
-  Reads the x, y and z axis.
+  Reads the acceleration on the x, y and z axis.
   The returned values are in in m/s².
   */
   read_acceleration -> List:
