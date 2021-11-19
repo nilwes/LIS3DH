@@ -21,5 +21,5 @@ main:
   100.repeat:
     acc = sensor.read_acceleration
     print_ "$(%5.2f acc[0]), $(%5.2f acc[1]), $(%5.2f acc[2])"
-    sleep --ms=(1000/rate).to_int // Read data the same rate as they are produced
+    sleep --ms=(1000/rate).to_int // Read data the same rate as it is produced
   sensor.disable
