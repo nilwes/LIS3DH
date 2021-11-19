@@ -73,7 +73,7 @@ class lis3dh:
   The $output_data_rate parameter defines the frequency at which measurements are taken.
   Valid values for $rate are:
   - 1  Hz
-  - 10 Hz
+  - 10 Hz <-- Default value
   - 25 Hz
   - 50 Hz
   - 100 Hz
@@ -82,7 +82,7 @@ class lis3dh:
 
   The $max_g_force parameter defines the maximum +/- range (in g).
   Valid values for $max_g_force are:
-  - 2 g
+  - 2 g <-- Default value
   - 4 g
   - 8 g
   - 16 g
