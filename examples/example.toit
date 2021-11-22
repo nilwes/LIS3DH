@@ -20,6 +20,6 @@ main:
   sensor.enable --max_g_force = 2 --output_data_rate = rate
   100.repeat:
     acc = sensor.read_acceleration
-    print_ "$(%5.2f acc[0]), $(%5.2f acc[1]), $(%5.2f acc[2])"
+    print_ "$(%5.2f acc[0]), $(%5.2f acc[1]), $(%5.2f acc[2])" // Print only to serial output
     sleep --ms=(1000/rate).to_int // Read data the same rate as it is produced
   sensor.disable
