@@ -116,8 +116,8 @@ class lis3dh:
     // at https://github.com/adafruit/Adafruit_LIS3DH/blob/master/Adafruit_LIS3DH.cpp
     if full_scale_ == 2:  lsb_value_ = 4
     if full_scale_ == 4:  lsb_value_ = 8
-    if full_scale_ == 8:  lsb_value_ = 16;
-    if full_scale_ == 16: lsb_value_ = 48;
+    if full_scale_ == 8:  lsb_value_ = 16
+    if full_scale_ == 16: lsb_value_ = 48
     x_acc_ := (lsb_value_ * (x_.to_float / LSB16_TO_KILO_LSB10_)) * GRAVITY_STANDARD_
     y_acc_ := (lsb_value_ * (y_.to_float / LSB16_TO_KILO_LSB10_)) * GRAVITY_STANDARD_
     z_acc_ := (lsb_value_ * (z_.to_float / LSB16_TO_KILO_LSB10_)) * GRAVITY_STANDARD_  
