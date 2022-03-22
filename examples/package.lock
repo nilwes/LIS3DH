@@ -1,0 +1,5 @@
+prefixes:
+  lis3dh: ..
+packages:
+  ..:
+    path: ..
