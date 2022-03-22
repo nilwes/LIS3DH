@@ -122,21 +122,11 @@ class Lis3dh:
   The returned values are in in m/s².
   */
   read_acceleration -> math.Point3f:
-    /*
-    // TODO(florian): why can't we use `read_i16_le` ?
-    x := reg_.read_i16_le OUT_X_L_
-    y := reg_.read_i16_le OUT_Y_L_
-    z := reg_.read_i16_le OUT_Z_L_
-    */
-    x_low  := reg_.read_u8 OUT_X_L_
-    x_high := reg_.read_i8 OUT_X_H_
-    y_low  := reg_.read_u8 OUT_Y_L_
-    y_high := reg_.read_i8 OUT_Y_H_
-    z_low  := reg_.read_u8 OUT_Z_L_
-    z_high := reg_.read_i8 OUT_Z_H_
-    x := (x_high << 8) | x_low
-    y := (y_high << 8) | y_low
-    z := (z_high << 8) | z_low
+    AUTO_INCREMENT_BIT ::= 0b1000_0000
+
+    x := reg_.read_i16_le (OUT_X_L_ | AUTO_INCREMENT_BIT)
+    y := reg_.read_i16_le (OUT_Y_L_ | AUTO_INCREMENT_BIT)
+    z := reg_.read_i16_le (OUT_Z_L_ | AUTO_INCREMENT_BIT)
 
     // Section 2.1, table4:
     // The linear acceleration sensitivity depends on the range.
