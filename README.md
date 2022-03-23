@@ -1,32 +1,41 @@
 # LIS3DH
+
 Toit driver for the LIS3DH accelerometer.
 
-The LIS3DH is an ultra-low-power high-performance three-axis linear accelerometer belonging to the “nano” family, with digital I2C/SPI serial interface standard output. The LIS3DH is available in small thin plastic land grid array package (LGA) and is guaranteed to operate over an extended temperature range from -40 °C to +85 °C.
-
 A full description of the LIS3DH sensor can be found at the [LIS3DH product page.][prodpage]
-
-Here is the [data sheet for LIS3DH.][datasheet]
-
-Here is a useful [application note.][appnote]
 
 ## Usage
 
 A simple usage example.
 
 ```
-import LIS3DH
+import gpio
+import i2c
+import lis3dh
 
 main:
-  ...
+  bus := i2c.Bus
+    --sda=gpio.Pin 21
+    --scl=gpio.Pin 22
+
+  device := bus.device lis3dh.I2C_ADDRESS
+  sensor := lis3dh.Lis3dh device
+
+  sensor.enable
+  print sensor.read_acceleration
 ```
 
 See the `examples` folder for more examples.
+
+## References
+
+Documentation for the LIS3DH: https://www.st.com/en/mems-and-sensors/lis3dh.html#documentation
+The Datasheet is [DS6839](https://www.st.com/resource/en/datasheet/lis3dh.pdf).
 
 ## Features and bugs
 
 Please file feature requests and bugs at the [issue tracker][tracker].
 
 [tracker]: https://github.com/nilwes/LIS3DH/issues
-[prodpage]: https://www.st.com/en/mems-and-sensors/lis3dh.html
+[prodpage]: https://www.st.com/en/mems-and-sensors/lis3dh.html#documentation
 [datasheet]: https://www.st.com/resource/en/datasheet/lis3dh.pdf
-[appnote]: https://cdn.sparkfun.com/assets/learn_tutorials/5/9/6/LIS3DH_AppNote_DocID_18198rev1.pdf
