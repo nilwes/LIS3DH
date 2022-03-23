@@ -135,17 +135,11 @@ class Lis3dh:
     // - RANGE_4G:   2mg/LSB
     // - RANGE_8G:   4mg/LSB
     // - RANGE_16G:  12mg/LSB   // <- Note that the 16G sensitivity is not 8mg/LSB as expected.
-
-    if range_ != RANGE_16G:
-      // It just happens that RANGE_2G to RANGE_8G can be calculated this way.
-      // We could also make 4 ifs.
-      x *= range_ + 1
-      y *= range_ + 1
-      z *= range_ + 1
-    else:
-      x *= 12
-      y *= 12
-      z *= 12
+    SENSITIVITIES ::= #[1, 2, 4, 12]
+    sensitivity := SENSITIVITIES[range_]
+    x *= sensitivity
+    y *= sensitivity
+    z *= sensitivity
 
     // The 16.0 is because the values are only 12 bits long.
     factor := GRAVITY_STANDARD_ / 1000.0 / 16.0  // Constant folded because it's one expression.
