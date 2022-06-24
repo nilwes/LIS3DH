@@ -163,7 +163,7 @@ class Lis3dh:
       else if rate == RATE_400HZ: int1_duration = (free_fall_duration * 4).in_ms / 10
       else: unreachable
 
-      if int1_duration == 0: throw "Invalid rate/duration combination."
+      if int1_duration == 0: throw "Invalid rate/duration combination"
 
       // AOI and 6D are set to 10: "AND combination of interrupt events".
       // See Table 55. Interrupt mode.
@@ -186,7 +186,7 @@ class Lis3dh:
     reg_.write_u8 INT1_DURATION_ int1_duration
     reg_.write_u8 INT1_CFG_ int1_cfg
 
-    sleep --ms=7 // Wait 7 Mhz to give the sensor time to wake up.
+    sleep --ms=7 // Wait 7ms to give the sensor time to wake up.
 
   /**
   Disables the accelerometer.
