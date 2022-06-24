@@ -136,6 +136,9 @@ class Lis3dh:
     int1_cfg := 0x0 // Default value
 
     if detect_free_fall:
+      // See chapter 6.4 of the sensor's application note:
+      // https://www.st.com/resource/en/application_note/an3308-lis3dh-mems-digital-output-motion-sensor-ultralowpower-highperformance-3axis-nano-accelerometer-stmicroelectronics.pdf
+
       // Enable interrupt 1 to use the interrupt generator (int1_cfg).
       ctrl3 = 0b100_0000  // IA1 interrupt on INT1.
 
