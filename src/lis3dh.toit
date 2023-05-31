@@ -34,29 +34,38 @@ class Lis3dh:
   static RANGE_16G ::= 3
 
   // Device Registers.
-  static WHO_AM_I_        ::=  0x0F
+  static WHO_AM_I_         ::= 0x0F
 
-  static CTRL_REG1_       ::=  0x20
-  static CTRL_REG2_       ::=  0x21
-  static CTRL_REG3_       ::=  0x22
-  static CTRL_REG4_       ::=  0x23
-  static CTRL_REG5_       ::=  0x24
+  static CTRL_REG1_        ::= 0x20
+  static CTRL_REG2_        ::= 0x21
+  static CTRL_REG3_        ::= 0x22
+  static CTRL_REG4_        ::= 0x23
+  static CTRL_REG5_        ::= 0x24
 
-  static INT1_CFG_        ::=  0x30
-  static INT1_SRC_        ::=  0x31
-  static INT1_THS_        ::=  0x32
-  static INT1_DURATION_   ::=  0x33
+  static REFERENCE_        ::= 0x26
 
-  static OUT_X_L_         ::=  0x28
-  static OUT_X_H_         ::=  0x29
-  static OUT_Y_L_         ::=  0x2A
-  static OUT_Y_H_         ::=  0x2B
-  static OUT_Z_L_         ::=  0x2C
-  static OUT_Z_H_         ::=  0x2D
+  static INT1_CFG_         ::= 0x30
+  static INT1_SRC_         ::= 0x31
+  static INT1_THS_         ::= 0x32
+  static INT1_DURATION_    ::= 0x33
 
-  static CHIP_ID_         ::=  0x33
+  static OUT_X_L_          ::= 0x28
+  static OUT_X_H_          ::= 0x29
+  static OUT_Y_L_          ::= 0x2A
+  static OUT_Y_H_          ::= 0x2B
+  static OUT_Z_L_          ::= 0x2C
+  static OUT_Z_H_          ::= 0x2D
+
+  static CHIP_ID_          ::= 0x33
 
   static GRAVITY_STANDARD_ ::= 9.80665
+
+  static INTERRUPT_X_LOW_BIT  ::= 1
+  static INTERRUPT_X_HIGH_BIT ::= 2
+  static INTERRUPT_Y_LOW_BIT  ::= 4
+  static INTERRUPT_Y_HIGH_BIT ::= 8
+  static INTERRUPT_Z_LOW_BIT  ::= 16
+  static INTERRUPT_Z_HIGH_BIT ::= 32
 
   // The currently selected range.
   range_/int := 0
@@ -68,6 +77,23 @@ class Lis3dh:
     reg_ = dev.registers
     // Check chip ID
     if (reg_.read_u8 WHO_AM_I_) != CHIP_ID_: throw "INVALID_CHIP"
+
+  /**
+  Enables the sensor.
+  Deprecated. Use $(enable --latch_interrupt) instead.
+  */
+  enable -> none
+      --rate/int = RATE_10HZ
+      --range/int = RANGE_2G
+      --detect_free_fall/bool = false
+      --latch_free_fall/bool
+      --free_fall_duration/Duration = (Duration --ms=30):
+    enable
+        --rate=rate
+        --range=range
+        --detect_free_fall
+        --free_fall_duration=free_fall_duration
+        --latch_interrupt = latch_free_fall
 
   /**
   Enables the sensor.
@@ -95,21 +121,33 @@ class Lis3dh:
     free-fall detection is enabled. The frequency must be high enough so that
     two measurements fall within the $free_fall_duration duration.
 
-  If $detect_free_fall is true and $latch_free_fall is set, then the
-    INT1 pin will be high until it is cleared with $clear_free_fall_interrupt.
-    Without $latch_free_fall, the INT1 pin is only high for the duration of
+  If $detect_free_fall is true and $latch_interrupt is set, then the
+    INT1 pin will be high until it is cleared with $read_interrupt_cause.
+    Without $latch_interrupt, the INT1 pin is only high for the duration of
     the free fall.
 
   The $free_fall_duration sets the minimum duration of a free-fall event for it
     to be recognized. The $rate must be high enough to allow for multiple sensor
     readings within the given duration.
+
+  If $detect_wake_up is true then the sensor will raise INT1 when it detects
+    movement.
+
+  Both the $detect_free_fall and $detect_wake_up use the $detection_threshold
+    to determine when they should trigger. The $detection_threshold is in
+    mg, and the range depends on the changes $range.
+    For $RANGE_2G (respectively $RANGE_4G, $RANGE_8G, and $RANGE_16G) the
+    granularity is 16mg (respectively 32mg, 62mg, and 186mg). Note that
+    the granularities don't scale linearly with the range.
   */
   enable -> none
       --rate/int = RATE_10HZ
       --range/int = RANGE_2G
       --detect_free_fall/bool = false
-      --latch_free_fall/bool = true
-      --free_fall_duration/Duration = (Duration --ms=30):
+      --free_fall_duration/Duration = (Duration --ms=30)
+      --detect_wake_up/bool = false
+      --detection_threshold/int = (detect_free_fall ? 372 : 64)
+      --latch_interrupt/bool = true:
 
     if not RATE_1HZ <= rate <= RATE_400HZ: throw "INVALID_RANGE"
     // 8.8. CTRL1.
@@ -125,31 +163,26 @@ class Lis3dh:
     range_bits := range << 4
     high_resolution_bit := 0b1000
 
-    ctrl3 := 0x0  // Default value. Might be changed by free-fall detection below.
-
+    ctrl2 := 0x0  // Default value. High-pass filter disabled.
+    ctrl3 := 0x0  // Default value. Might be changed by free-fall or movement detection below.
     ctrl4 := range_bits | high_resolution_bit
-
     ctrl5 := 0x0 // Default value
 
     int1_threshold := 0x0 // Default value
     int1_duration := 0x0 // Default value
     int1_cfg := 0x0 // Default value
 
+    needs_reference := false
+
+    if detect_free_fall and detect_wake_up:
+      throw "Can't detect free fall and wake up at the same time."
+
     if detect_free_fall:
       // See chapter 6.4 of the sensor's application note:
       // https://www.st.com/resource/en/application_note/an3308-lis3dh-mems-digital-output-motion-sensor-ultralowpower-highperformance-3axis-nano-accelerometer-stmicroelectronics.pdf
 
       // Enable interrupt 1 to use the interrupt generator (int1_cfg).
-      ctrl3 = 0b100_0000  // IA1 interrupt on INT1.
-
-      // The threshold value depends on the range.
-      // The least significant bit in the register is worth:
-      // - 16mg @ 2G
-      // - 32mg @ 4G
-      // - 62mg @ 8G
-      // - 186mg @ 16G
-      // We want to detect free fall at roughly 350mg.
-      int1_threshold = range == RANGE_16G ? 2 : (0x16 >> range)
+      ctrl3 |= 0b100_0000  // IA1 interrupt on INT1.
 
       if free_fall_duration.in_ns <= 0: throw "INVALID_RANGE"
 
@@ -172,18 +205,56 @@ class Lis3dh:
       // than the threshold.
       interrupt_on_low := 0b010101
 
-      int1_cfg = interrupt_mode | interrupt_on_low
+      int1_cfg |= interrupt_mode | interrupt_on_low
 
-      if latch_free_fall:
-        ctrl5 = 0b1000  // Latch interrupt request on INT1_SRC.
+    if detect_wake_up:
+      // Enable the high-pass filter.
+      // This is optional for x/y wake-up but pretty much necessary for z wake-up since
+      // the earth's gravity is always present.
+      ctrl2 |= 0b1001  // Enable high-pass filter.
+      // Enable interrupt 1 to use the interrupt generator (int1_cfg).
+      ctrl3 |= 0b100_0000  // Interrupt activity 1 driven to INT1 pad.
+      int1_duration = 0     // It should already be 0, but be explicit.
+
+      // 6-direction movement recognition.
+      interrupt_mode := 0b0100_0000
+      // Trigger on all directions higher than the threshold.
+      interrupt_on_high := 0b101010
+      int1_cfg |= interrupt_mode | interrupt_on_high
+      int1_cfg = 0x2A
+      needs_reference = true  // We are using a high-pass filter, so we need to set the reference.
+
+    if latch_interrupt and (detect_free_fall or detect_wake_up):
+      ctrl5 |= 0b1000  // Latch interrupt request on INT1_SRC.
+
+    if detect_free_fall or detect_wake_up:
+      // The threshold value depends on the range.
+      // The least significant bit in the register is worth:
+      // - 16mg @ 2G
+      // - 32mg @ 4G
+      // - 62mg @ 8G
+      // - 186mg @ 16G
+      // We want to detect free fall at roughly 350mg.
+      if range == RANGE_2G:
+        int1_threshold = detection_threshold >> 4
+      else if range == RANGE_4G:
+        int1_threshold = detection_threshold >> 3
+      else if range == RANGE_8G:
+        int1_threshold = detection_threshold / 62
+      else if range == RANGE_16G:
+        int1_threshold = detection_threshold / 186
+      else:
+        unreachable
 
     reg_.write_u8 CTRL_REG1_ ctrl1
+    reg_.write_u8 CTRL_REG2_ ctrl2
     reg_.write_u8 CTRL_REG3_ ctrl3
     reg_.write_u8 CTRL_REG4_ ctrl4
     reg_.write_u8 CTRL_REG5_ ctrl5
 
     reg_.write_u8 INT1_THS_ int1_threshold
     reg_.write_u8 INT1_DURATION_ int1_duration
+    if needs_reference: reg_.read_u8 REFERENCE_
     reg_.write_u8 INT1_CFG_ int1_cfg
 
     sleep --ms=7 // Wait 7ms to give the sensor time to wake up.
@@ -237,6 +308,22 @@ class Lis3dh:
   When the sensor is configured to detect free-fall events, and the `--latch_free_fall`
     was provided during $enable, then the interrupt pin stays set until this function
     is called.
+
+  Deprecated. Use $read_interrupt_cause instead.
   */
   clear_free_fall_interrupt:
     reg_.read_u8 INT1_SRC_
+
+  /**
+  Reads the interrupt cause and clears the interrupt.
+
+  When the sensor is configured to detect free-fall or wake-up events, and the
+    `--latch_interupt` was provided during $enable, then the interrupt pin stays set
+    until this function is called.
+
+  The returned integer has the $INTERRUPT_X_LOW_BIT set to high if a low event
+    on the x axis was detected. The same goes for the y and z axis. Similarly,
+    the $INTERRUPT_X_HIGH_BIT is set to high if a high event was detected.
+  */
+  read_interrupt_cause -> int:
+    return reg_.read_u8 INT1_SRC_
