@@ -1,4 +1,4 @@
-// Copyright (C) 2022 Toitware ApS. All rights reserved.
+// Copyright (C) 2023 Toitware ApS.
 // Use of this source code is governed by a Zero-Clause BSD license that can
 // be found in the EXAMPLES_LICENSE file.
 
@@ -22,12 +22,12 @@ main:
 
   sensor.enable
       --rate=lis3dh.Lis3dh.RATE_100HZ
-      --detect_free_fall
+      --detect_wake_up
 
   while true:
     interrupt.wait_for 1
-    print "free fall detected"
+    print "movement detected"
+    sleep --ms=1000
     sensor.read_interrupt_cause
-    sleep --ms=100
 
   sensor.disable
