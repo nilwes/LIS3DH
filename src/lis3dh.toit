@@ -267,6 +267,7 @@ class Lis3dh:
       else:
         unreachable
 
+      // Set up the fifo in Stream-to-FIFO mode.
       if fifo: fifo-bits = 0b1100_0000
 
     reg_.write-u8 FIFO_CTRL_REG_ 0
@@ -274,13 +275,14 @@ class Lis3dh:
     reg_.write_u8 CTRL_REG2_ ctrl2
     reg_.write_u8 CTRL_REG3_ ctrl3
     reg_.write_u8 CTRL_REG4_ ctrl4
+    // According to the datasheet, the FIFO enable bit should be delayed to after interupts.
     reg_.write_u8 CTRL_REG5_ (ctrl5 & 0b1011_1111)
 
     if needs_reference: reset-reference
     reg_.write_u8 INT1_THS_ int1_threshold
     reg_.write_u8 INT1_DURATION_ int1_duration
     reg_.write_u8 INT1_CFG_ int1_cfg
-    reg_.write_u8 CTRL_REG5_ ctrl5
+    reg_.write_u8 CTRL_REG5_ ctrl5 // Set the FIF enable bit now.
 
     reg_.write-u8 FIFO_CTRL_REG_ fifo-bits
 
@@ -347,8 +349,10 @@ class Lis3dh:
     return List samples : read_acceleration
 
   /**
-  Resets the reference value to the current measures. This is used to clear any DC component in
-  the measurement data.
+  Resets the reference value to the current measures.
+  This is used to clear any DC component in the measurement data.
+  Resetting the DC component will cause the high-pass filter to use the current
+    value as the reference point.
   */
   reset-reference:
     reg_.read_u8 REFERENCE_
@@ -381,8 +385,9 @@ class Lis3dh:
     ctrl5 := reg_.read-u8 CTRL_REG5_
 
     if (ctrl5 & 0b1000) != 0 and (fifo-ctrl & 0b1100_0000) == 0b1100_0000:
-      // If latch and fifo
+      // If latch and fifo.
       interrupt_source := reg_.read-u8 INT1_SRC_
+      // After the interrupt is cleared, it is necessary to re-enable Stream-to-FIFO mode.
       reg_.write-u8 FIFO_CTRL_REG_ 0b0011_1111 & fifo-ctrl
       reg_.write-u8 FIFO_CTRL_REG_ 0b1100_0000 | fifo-ctrl
       return interrupt_source
