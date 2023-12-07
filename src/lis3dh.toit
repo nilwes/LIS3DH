@@ -49,6 +49,9 @@ class Lis3dh:
   static INT1_THS_         ::= 0x32
   static INT1_DURATION_    ::= 0x33
 
+  static FIFO_CTRL_REG_    ::= 0x2E
+  static FIFO_SRC_REG_     ::= 0x2F
+
   static OUT_X_L_          ::= 0x28
   static OUT_X_H_          ::= 0x29
   static OUT_Y_L_          ::= 0x2A
@@ -114,6 +117,11 @@ class Lis3dh:
   - $RANGE_8G: +-8G (78.45 m/s²)
   - $RANGE_16G: +-16G (156.9 m/s²)
 
+  If $fifo is true, enables the internal fifo on the chip. This allows will potentially
+    make read-all return a list of more than one element. If any detection is enabled
+    the driver will choose the stream-to-FIFO mode as that is more relevant for interrupt
+    based operations.
+
   If $detect_free_fall is true, the sensor will raise INT1 (a pin on the
     sensor) when it detects a free fall.
 
@@ -133,6 +141,9 @@ class Lis3dh:
   If $detect_wake_up is true then the sensor will raise INT1 when it detects
     movement.
 
+  If $read-relative-on-detect is false, then read absolute values when the detection
+    is enabled. The default is to read relative values since the last reset.
+
   Both the $detect_free_fall and $detect_wake_up use the $detection_threshold
     to determine when they should trigger. The $detection_threshold is in
     mg, and the range depends on the changes $range.
@@ -143,12 +154,13 @@ class Lis3dh:
   enable -> none
       --rate/int = RATE_10HZ
       --range/int = RANGE_2G
+      --fifo/bool = false
       --detect_free_fall/bool = false
       --free_fall_duration/Duration = (Duration --ms=30)
       --detect_wake_up/bool = false
       --detection_threshold/int = (detect_free_fall ? 372 : 64)
-      --latch_interrupt/bool = true:
-
+      --latch_interrupt/bool = true
+      --read-relative-on-detect/bool = true:
     if not RATE_1HZ <= rate <= RATE_400HZ: throw "INVALID_RANGE"
     // 8.8. CTRL1.
     rate_bits := rate << 4
@@ -172,10 +184,17 @@ class Lis3dh:
     int1_duration := 0x0 // Default value
     int1_cfg := 0x0 // Default value
 
+    fifo-bits :=  0
+
+    if fifo:
+      fifo-bits = 0b0100_0000
+      ctrl5 |= 0b100_0000
+
     needs_reference := false
 
     if detect_free_fall and detect_wake_up:
       throw "Can't detect free fall and wake up at the same time."
+
 
     if detect_free_fall:
       // See chapter 6.4 of the sensor's application note:
@@ -211,17 +230,19 @@ class Lis3dh:
       // Enable the high-pass filter.
       // This is optional for x/y wake-up but pretty much necessary for z wake-up since
       // the earth's gravity is always present.
-      ctrl2 |= 0b1001  // Enable high-pass filter.
+      ctrl2 |= 0b0001  // Enable high-pass filter.
+      if read-relative-on-detect: // Read relative values
+        ctrl2 |= 0b1000
       // Enable interrupt 1 to use the interrupt generator (int1_cfg).
       ctrl3 |= 0b100_0000  // Interrupt activity 1 driven to INT1 pad.
       int1_duration = 0     // It should already be 0, but be explicit.
 
       // 6-direction movement recognition.
-      interrupt_mode := 0b0100_0000
+      //interrupt_mode := 0b0100_0000
+      interrupt_mode := 0b0000_0000
       // Trigger on all directions higher than the threshold.
-      interrupt_on_high := 0b101010
+      interrupt_on_high := 0b10_1010
       int1_cfg |= interrupt_mode | interrupt_on_high
-      int1_cfg = 0x2A
       needs_reference = true  // We are using a high-pass filter, so we need to set the reference.
 
     if latch_interrupt and (detect_free_fall or detect_wake_up):
@@ -246,16 +267,24 @@ class Lis3dh:
       else:
         unreachable
 
+      // Set up the fifo in Stream-to-FIFO mode.
+      if fifo: fifo-bits = 0b1100_0000
+
+    reg_.write-u8 FIFO_CTRL_REG_ 0
     reg_.write_u8 CTRL_REG1_ ctrl1
     reg_.write_u8 CTRL_REG2_ ctrl2
     reg_.write_u8 CTRL_REG3_ ctrl3
     reg_.write_u8 CTRL_REG4_ ctrl4
-    reg_.write_u8 CTRL_REG5_ ctrl5
+    // According to the datasheet, the FIFO enable bit should be delayed to after interrupts.
+    reg_.write_u8 CTRL_REG5_ (ctrl5 & 0b1011_1111)
 
+    if needs_reference: reset-reference
     reg_.write_u8 INT1_THS_ int1_threshold
     reg_.write_u8 INT1_DURATION_ int1_duration
-    if needs_reference: reg_.read_u8 REFERENCE_
     reg_.write_u8 INT1_CFG_ int1_cfg
+    reg_.write_u8 CTRL_REG5_ ctrl5 // Set the FIFO enable bit now.
+
+    reg_.write-u8 FIFO_CTRL_REG_ fifo-bits
 
     sleep --ms=7 // Wait 7ms to give the sensor time to wake up.
 
@@ -303,6 +332,32 @@ class Lis3dh:
         z * factor
 
   /**
+  Reads all available data from the FIFO. Waits until at least one $min-samples is ready
+  */
+  read-all --min-samples/int=1 -> List?:
+    if min-samples > 32: throw "INVALID_ARGUMENT"
+
+    reg5 := reg_.read-u8 CTRL_REG5_
+    if reg5 & 0b0100_0000 == 0: throw "Fifo not enabled"
+
+    samples := ?
+    while true:
+      src := reg_.read-u8 FIFO_SRC_REG_
+      samples = src & 0b001_1111
+      if samples >= min-samples: break
+
+    return List samples : read_acceleration
+
+  /**
+  Resets the reference value to the current measures.
+  This is used to clear any DC component in the measurement data.
+  Resetting the DC component will cause the high-pass filter to use the current
+    value as the reference point.
+  */
+  reset-reference:
+    reg_.read_u8 REFERENCE_
+
+  /**
   Clears the sensor's interrupt.
 
   When the sensor is configured to detect free-fall events, and the `--latch_free_fall`
@@ -326,4 +381,15 @@ class Lis3dh:
     the $INTERRUPT_X_HIGH_BIT is set to high if a high event was detected.
   */
   read_interrupt_cause -> int:
-    return reg_.read_u8 INT1_SRC_
+    fifo-ctrl := reg_.read-u8 FIFO_CTRL_REG_
+    ctrl5 := reg_.read-u8 CTRL_REG5_
+
+    if (ctrl5 & 0b1000) != 0 and (fifo-ctrl & 0b1100_0000) == 0b1100_0000:
+      // If latch and fifo.
+      interrupt_source := reg_.read-u8 INT1_SRC_
+      // After the interrupt is cleared, it is necessary to re-enable Stream-to-FIFO mode.
+      reg_.write-u8 FIFO_CTRL_REG_ 0b0011_1111 & fifo-ctrl
+      reg_.write-u8 FIFO_CTRL_REG_ 0b1100_0000 | fifo-ctrl
+      return interrupt_source
+    else:
+      return reg_.read-u8 INT1_SRC_
