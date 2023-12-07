@@ -275,14 +275,14 @@ class Lis3dh:
     reg_.write_u8 CTRL_REG2_ ctrl2
     reg_.write_u8 CTRL_REG3_ ctrl3
     reg_.write_u8 CTRL_REG4_ ctrl4
-    // According to the datasheet, the FIFO enable bit should be delayed to after interupts.
+    // According to the datasheet, the FIFO enable bit should be delayed to after interrupts.
     reg_.write_u8 CTRL_REG5_ (ctrl5 & 0b1011_1111)
 
     if needs_reference: reset-reference
     reg_.write_u8 INT1_THS_ int1_threshold
     reg_.write_u8 INT1_DURATION_ int1_duration
     reg_.write_u8 INT1_CFG_ int1_cfg
-    reg_.write_u8 CTRL_REG5_ ctrl5 // Set the FIF enable bit now.
+    reg_.write_u8 CTRL_REG5_ ctrl5 // Set the FIFO enable bit now.
 
     reg_.write-u8 FIFO_CTRL_REG_ fifo-bits
 
